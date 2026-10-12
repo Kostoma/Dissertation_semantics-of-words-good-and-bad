@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Хороший и плохой: объекты и оценки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0}[hidden]{display:none!important}
+
+/* Layout: шапка → переключатели → матрица «строка × период» с двумя лентами (хороший / плохой) + панель примера → соседи по полю → частотность */
+:root{
+  --bg:#F1F1EE; --surface:#FAFAF8; --fg:#1B1D22; --muted:#62656D; --line:#D3D3CD;
+  --good:#1B1D22; --bad:#A3402A; --other:#8A8C92; --hl:#E7E5DD;
+  --f-display:"Spectral", "PT Serif", Georgia, serif;
+  --f-ui:"IBM Plex Sans", "PT Sans", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141518; --surface:#1B1C20; --fg:#E6E5E0; --muted:#9A9CA3; --line:#33353B;
+  --good:#E6E5E0; --bad:#E07A5F; --other:#7C7F87; --hl:#26272C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141518; --surface:#1B1C20; --fg:#E6E5E0; --muted:#9A9CA3; --line:#33353B;
+  --good:#E6E5E0; --bad:#E07A5F; --other:#7C7F87; --hl:#26272C; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:15px;line-height:1.5}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:grid;gap:22px}
+h1{font:600 clamp(28px,4.4vw,44px)/1.1 var(--f-display);margin:0;text-wrap:balance}
+h1 .g{color:var(--good)} h1 .b{color:var(--bad)}
+.lede{color:var(--muted);max-width:72ch;margin:8px 0 0}
+h2{font:600 12px var(--f-ui);text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 10px}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface)}
+.seg button{font:500 13px var(--f-ui);color:var(--fg);background:none;border:0;padding:7px 13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+button:focus-visible{outline:2px solid var(--bad);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);align-items:center}
+.sw{display:inline-block;width:26px;height:8px;border-radius:2px;vertical-align:1px;margin-right:6px}
+.sw.g{background:var(--good)} .sw.b{background:var(--bad)}
+.sw.w{background:repeating-linear-gradient(135deg,var(--muted) 0 2px,transparent 2px 5px);border:1px solid var(--muted)}
+.sw.o{height:0;border-top:2px dotted var(--other);border-radius:0}
+.dia{display:inline-block;width:8px;height:8px;transform:rotate(45deg);background:var(--bad);margin:0 6px 0 2px}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+@media (max-width:960px){.main{grid-template-columns:1fr}}
+.scroller{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;min-width:760px}
+th,td{padding:0}
+thead th{font:500 12px var(--f-ui);color:var(--muted);text-align:left;padding:12px 10px 10px;border-bottom:1px solid var(--line);vertical-align:bottom}
+thead th b{display:block;font:600 14px var(--f-display);color:var(--fg)}
+thead th:first-child{position:sticky;left:0;background:var(--surface);z-index:2}
+tbody th{position:sticky;left:0;background:var(--surface);z-index:1;text-align:left;font-weight:400;padding:10px 12px 10px 14px;border-bottom:1px solid var(--line);width:230px;min-width:190px;vertical-align:middle}
+tbody th .rl{font:600 15px/1.25 var(--f-display);display:block}
+tbody th .rh{font-size:12px;color:var(--muted);display:block;margin-top:2px}
+tbody td{border-bottom:1px solid var(--line);border-left:1px solid var(--line);vertical-align:middle;height:64px}
+.cell{display:grid;grid-template-rows:1fr 1fr;height:100%;min-height:64px}
+.lane{position:relative;display:flex;align-items:center;cursor:pointer;border:0;background:none;padding:0;width:100%;text-align:left;font:inherit;color:inherit}
+.lane:hover,.lane.sel{background:var(--hl)}
+.lane .seg2{position:absolute;left:0;right:0;height:9px;top:50%;transform:translateY(-50%)}
+.lane.g .seg2{background:var(--good)} .lane.b .seg2{background:var(--bad)}
+.lane.w .seg2{background:repeating-linear-gradient(135deg,currentColor 0 2px,transparent 2px 5px);opacity:.85}
+.lane.g.w{color:var(--good)} .lane.b.w{color:var(--bad)}
+.lane.o .seg2{height:0;border-top:2px dotted var(--other);background:none}
+.lane .tag{position:relative;z-index:1;margin-left:8px;font:italic 400 12.5px var(--f-display);color:var(--muted);background:var(--surface);padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 12px)}
+.lane:hover .tag,.lane.sel .tag{background:var(--hl)}
+.lane .nw{position:absolute;left:6px;top:50%;width:11px;height:11px;transform:translateY(-50%) rotate(45deg);background:var(--bg);border:2px solid currentColor;z-index:1}
+.lane.g{color:var(--good)} .lane.b{color:var(--bad)}
+.lane.empty{cursor:default}.lane.empty:hover{background:none}
+.hideg .lane.g, .hideb .lane.b{visibility:hidden}
+tfoot td,tfoot th{padding:10px;font-size:12px;color:var(--muted);vertical-align:top}
+tfoot th{position:sticky;left:0;background:var(--surface);text-align:left;font-weight:500}
+.cnt{font:500 13px var(--f-mono);display:flex;gap:10px}
+.cnt .g{color:var(--good)} .cnt .b{color:var(--bad)}
+
+.panel{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px 18px;display:grid;gap:8px}
+.panel .who{font:600 12px var(--f-ui);text-transform:uppercase;letter-spacing:.08em}
+.panel .who.g{color:var(--good)} .panel .who.b{color:var(--bad)}
+.panel h3{font:600 19px/1.25 var(--f-display);margin:0}
+.panel .per{font:400 12px var(--f-mono);color:var(--muted)}
+.panel .st{display:inline-block;font:500 11px var(--f-ui);text-transform:uppercase;letter-spacing:.06em;border:1px solid var(--line);border-radius:3px;padding:2px 7px;color:var(--muted);justify-self:start}
+.panel p{margin:0}
+.panel .ex{font:italic 400 15px/1.5 var(--f-display);border-left:2px solid var(--line);padding-left:12px}
+.panel .src{font-size:12px;color:var(--muted)}
+.panel .empty{color:var(--muted)}
+
+.field{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.field{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.field{grid-template-columns:1fr}}
+.fc{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:grid;gap:8px;align-content:start;min-width:0}
+.fc h4{margin:0;font:600 14px var(--f-display)}
+.fc .pl{font:400 11px var(--f-mono);color:var(--muted)}
+.fc .row{font-size:13px}
+.fc .row b{font:600 11px var(--f-ui);letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:2px}
+.fc .row.g b{color:var(--good)} .fc .row.b b{color:var(--bad)}
+.fc i{font-family:var(--f-display);font-size:14px}
+.fc .nt{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:6px}
+
+.freq{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.fq{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:14px 16px;min-width:0}
+.fq h4{margin:0 0 4px;font:600 15px var(--f-display)}
+.fq p{margin:0 0 10px;font-size:12.5px;color:var(--muted)}
+.fq svg{width:100%;height:auto;display:block}
+.notes{font-size:13px;color:var(--muted);max-width:80ch}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1><span class="g">Хороший</span> и <span class="b">плохой</span>: что оценивают и как</h1>
+    <p class="lede">Каждая лента показывает, с какого периода слово характеризует данный тип объектов или выражает данный тип оценки. Пунктир с подписью — область занята другим словом. Нажмите на ленту, чтобы увидеть пример и пояснение.</p>
+  </header>
+
+  <div class="bar">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="seg" role="group" aria-label="Измерение">
+        <button id="tObj" aria-pressed="true">Типы объектов</button><button id="tEval" aria-pressed="false">Типы оценки</button>
+      </div>
+      <div class="seg" role="group" aria-label="Слова">
+        <button data-w="both" aria-pressed="true">Оба</button><button data-w="g" aria-pressed="false">хороший</button><button data-w="b" aria-pressed="false">плохой</button>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="sw g"></span>хороший</span>
+      <span><span class="sw b"></span>плохой</span>
+      <span><span class="dia"></span>первая фиксация / новое значение</span>
+      <span><span class="sw w"></span>периферийно</span>
+      <span><span class="sw o"></span>занято другим словом</span>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="scroller"><table id="grid"></table></div>
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </div>
+
+  <section>
+    <h2>Соседи по оценочному полю</h2>
+    <div class="field" id="field"></div>
+  </section>
+
+  <section>
+    <h2>Частотность</h2>
+    <div class="freq" id="freq"></div>
+  </section>
+
+</div>
+
+<script>
+const PER=[
+ {t:"XII–XIV вв.",s:"древнерусский",ch:"глава «XII–XIV вв.»"},
+ {t:"XV–XVII вв.",s:"старорусский",ch:"глава «XV–XVII века»"},
+ {t:"Конец XVII — нач. XVIII в.",s:"петровская эпоха",ch:"глава 4, «Конец XVII — начало XVIII века»"},
+ {t:"Сер. и 2-я пол. XVIII в.",s:"Просвещение",ch:"глава 4, «Середина и вторая половина XVIII века»"},
+ {t:"1-я пол. и сер. XIX в.",s:"романтизм, реализм",ch:"материалы главы о XIX веке"}
+];
+const STL={n:"первая фиксация",y:"продолжает употребляться",w:"периферийно",o:"занято другим словом"};
+// cell: [state, text, example] ; state o: text = слова-конкуренты
+const OBJ=[
+ {id:"mat",l:"Материальные объекты",h:"предметы, еда, товары, постройки",
+  g:{0:["n","Единственная денотативная область хорошего в XII–XIV вв.: оценка того, каким должен быть любой подобный объект.","хороше ль письмя (приписка к уставу, XII в.); видѣше кѣлью его не хорошю (Пандекты Никона Черногорца, XIV в.)"],
+     1:["y","Положительная утилитарная оценка предметов.","На реке мост хорош добр и высок (1649–1653); Две лошеди, одна худа, а другая хороша (Архив Безобразова)"],
+     2:["y","Сохраняется оценка соответствия практической норме.","Чрез то смешение делается железо хорошее (В. Н. Татищев, 1734)"],
+     3:["y","В экономической и естественнонаучной литературе хороший передаёт нем. gut, wol, fein; встречается как синоним доброго.","Просо сеют на хорошей и жирной земле (Ломоносов, «Лифляндская экономия»)"],
+     4:["y","К началу XIX в. освоены почти все сферы, характерные для языка XXI в.",""]},
+  b:{0:["o","худой, лихой, злой","Плохой ещё не зафиксирован. Материальные объекты оценивают худой (худой дом), лихой (лихая пища), злой (злое имение)."],
+     1:["n","Первая фиксация; в XVI в. характеризует в основном объекты и сооружения. Вступает в конкуренцию с худым.","А ѣства же ихъ плоха (Афанасий Никитин, 1468–1474); Два постава сукна, один бы постав добр был, а другои бы постав плохои"],
+     2:["y","Значение ‘не соответствует представлениям о том, каким должен быть подобный объект’.","Здесь колокола так делают плохи, что голосу хорошего нет (Татищев, 1735)"],
+     3:["y","САР толкует плохой утилитарно: ‘не имеющий потребных качеств или доброты в рассуждении других подобных себе’.",""],
+     4:["y","","…запивая его плохой колодезной водою (М. Н. Загоскин, 1829)"]}},
+ {id:"per",l:"Человек в целом",h:"общая характеристика лица",
+  g:{0:["o","добрый, благой, лепый","Людей характеризуют добрый, благой, лепый, годный, славный: добрый князь, благой владыка, лепый муж, годная жена."],
+     1:["n","Положительная оценка людей, которую нельзя однозначно назвать этической или эстетической. На рубеже XVII–XVIII вв. хороший становится основной общей положительной характеристикой человека.","А робята все молодые и хорошие (1624); у хорошего молодца все хорошо"],
+     2:["y","","А ежели бы из хороших людей и довольно в обоих языках наученые переводчики… (Татищев)"],
+     3:["y","Появляется значение ‘не делает плохого’; образ хорошего человека формирует нравоучительная литература.","«Юности честное зерцало» (1717), «Карманная книжка честнаго человека» (1794)"],
+     4:["y","","может быть, г. Полевой хороший человек и хороший гражданин (С. Т. Аксаков, 1829); пьеса «Хороший человек» (1855)"]},
+  b:{0:["o","худой, лихой","худой человек; лихой человек"],1:["o","худой",""],2:["o","худой","В первой половине XVIII в. худой встречается в 7 раз чаще плохого."],
+     3:["n","Оценка общей состоятельности человека, его соответствия представлению о «нормальном» человеке; нравственно нейтральна.","у кого нет ничего, тот верно плохой человек (П. А. Плавильщиков, 1790); плохи стали ныне люди (А. П. Сумароков, 1770)"],
+     4:["y","","плохая личность (1845); плохой демократ (1845)"]}},
+ {id:"look",l:"Внешность",h:"эстетическая оценка человека",
+  g:{0:["w","В МДСРЯ — контекстное значение ‘красивый’, но точнее его описывает ‘такой, каким должен быть подобный объект’.",""],
+     1:["n","Эстетическая оценка людей, прежде всего в фольклоре.","Хорош мой миленькой, что наливная яблочка (песни, XVII в.); Чем я красна и хороша?"],
+     2:["y","","И крестьянские девки хороши бывают (А. П. Сумароков, 1750)"],
+     3:["y","Складывается сочетание хорош собою: параметр оценки — сам человек.","хорош собою"],
+     4:["y","Хорош собою активно употребляется в XIX в.",""]},
+  b:{}},
+ {id:"hl",l:"Состояние, здоровье",h:"физическое состояние человека",
+  g:{3:["n","Новое значение: ‘функционирующий как нужно, здоровый’; характеризует состояние здоровья.",""],
+     4:["y","Конкурирует с устойчивым в добром здравии.","в хорошем здоровье (1811)"]},
+  b:{1:["n","В XVII в. плохой начинает характеризовать состояние человека.",""],
+     2:["y","Новое значение ‘тяжело болеет или находится в ухудшающемся физическом состоянии’, отчасти вместо худой.",""],
+     3:["y","Характеризует степень качества и здоровья.","У меня память весьма плоха (Г. И. Громов, 1798)"],
+     4:["y","","Мне пишут что ея здоровье плохо (А. С. Пушкин, 1831)"]}},
+ {id:"sk",l:"Способности, мастерство",h:"профессиональные качества",
+  g:{3:["n","Оценка людей по роду занятий.","из худых писателей делал хороших авторов (Н. И. Новиков, «Трутень», 1769)"],
+     4:["y","","Хорошие Авторы! думайте о следствиях того, что вы пишете! (Карамзин, 1802); хороший почерк (1811)"]},
+  b:{1:["n","Указание на незначительные способности и низкий уровень мастерства (XVII в.).",""],
+     2:["y","Оценка способностей и навыков.",""],
+     3:["y","","самый плохой и ленивый офицер (И. М. Долгоруков, 1788)"],
+     4:["y","","неплохой моряк по знанию моря, но очень плохой по своей лености (Бестужев-Марлинский, 1834)"]}},
+ {id:"abs",l:"Нематериальные объекты",h:"доводы, тексты, искусство, принципы",
+  g:{0:["o","добрый, благой","добрые мудрости; благая мысль"],
+     1:["o","добрый","В XV–XVII вв. хороший не оценивает ситуации, действия и нематериальные объекты — эту область обслуживает добрый."],
+     2:["n","Расширение круга объектов на нематериальное.","Хорошие доводы (1730); ворота с хорошей пропорцией (П. А. Толстой, 1697–1699); обучаются всякого хорошего мастерства (указ Петра I)"],
+     3:["y","В поэзии — рифма, стих, слог; калька хороший вкус (bon goût).","своим хорошим вкусом и остроумием (Новиков, 1769)"],
+     4:["y","","хорошие принципы (1812); хорошая конституция (1813); хорошее замечание (1812)"]},
+  b:{0:["o","злой, скверный, лихой","злые казни; скверные речи; лихие речи"],1:["o","злой","Злой сохраняет частоту в сфере этической оценки и регулярно характеризует нематериальные объекты."],
+     3:["n","Плохой чаще характеризует нематериальные объекты, состояния и результаты деятельности.","о плохом снабжении эскадры (Ф. Ф. Ушаков, 1799); от небрежного или плохого лечения (1783)"],
+     4:["y","","плохая надежда (1819); плохое утешение (1833); плохой расчет (И. В. Киреевский, 1844)"]}},
+ {id:"sit",l:"Ситуации, положение дел",h:"обстоятельства, погода, жизнь",
+  g:{1:["o","добрый","Ситуации в XV–XVII вв. оценивает добрый."],
+     2:["n","Оценка ситуаций; впервые фиксируется хорошая погода — условия, благоприятные для деятельности человека.","Здешней Екатеринской завод… в состоянии хорошем (Татищев, 1734)"],
+     3:["y","Устойчивые сочетания.","хорошее состояние; хороший знак"],
+     4:["y","","Хорошая жизнь (1810); хорошее житье (1824); хороший повод (1833)"]},
+  b:{1:["n","Во второй половине XVII в. всё чаще указывается причина отрицательной оценки ситуации.",""],
+     2:["y","",""],
+     3:["y","Устойчивые сочетания.","дело плохо; плохо одет"],
+     4:["y","","в плохом состоянии (1812); плохие времена (1829); плохие обстоятельства (1830)"]}},
+ {id:"act",l:"Действия, результаты, перспективы",h:"успех, удача, надежды",
+  g:{3:["n","Хороший характеризует имена действий, результат и ожидаемое развитие.","хороший успех; хорошая удача; хорошие надежды"],
+     4:["y","","Хороший урок (1800-е); Хорошее правление (1811)"]},
+  b:{2:["w","Только наречие плохо — оценка поступков.",""],
+     3:["n","Результаты деятельности.",""],
+     4:["y","","плохая услуга (1849); плохая защита (1851)"]}},
+ {id:"soc",l:"Социальная среда, нравы",h:"общество, круг, репутация",
+  g:{3:["n","‘Соответствующий нормам поведения, принятым в данном сообществе’; школьная оценка поведения.","просвещением и хорошими нравами блистают… (Новиков, 1774); ученики поведения хорошаго (1783)"],
+     4:["y","Хороший описывает светское общество и репутацию.","хорошая партия (1803); хорошая фамилия (1809); хорошая репутация (1827); в хорошем кругу (1827); хорошее семейство (1829)"]},
+  b:{4:["n","","плохая репутация (1846); Лопухов плохая компания для нее (Чернышевский, 1863)"]}}
+];
+const EVAL=[
+ {id:"norm",l:"Соответствие норме класса",h:"‘образцовый’ / ‘не такой, каким должен быть’",
+  g:{0:["n","‘Такой, каким должен быть любой подобный объект’.","хороше ль письмя; кѣлью его не хорошю"],1:["y","Одно из трёх основных значений XV–XVI вв.",""],2:["y","Оценка соответствия практической норме.",""],3:["y","Соотнесение со всё более абстрактными нормами — практической, эстетической, этической, социальной.",""],4:["y","",""]},
+  b:{0:["o","худой","Худой указывает на несоответствие норме или среднему."],1:["n","XVI в.: ‘такой, который не соответствует общепринятым представлениям о том, каким должен быть подобный объект’.",""],2:["y","",""],3:["y","",""],4:["y","",""]}},
+ {id:"util",l:"Утилитарная оценка",h:"польза, практическая годность",
+  g:{0:["o","годный, добрый","Годный оценивает материальные объекты с точки зрения установленного стандарта; добрый — потенциальной пользы."],
+     1:["n","Положительная утилитарная оценка предметов.",""],2:["y","Часто утилитарная оценка предметов и людей.",""],
+     3:["n","Новое значение ‘приносит или может принести пользу’, ‘самый подходящий’.","хорошие деньги (1789); с хорошим случаем свататься"],4:["y","",""]},
+  b:{1:["n","Отрицательная оценка остаётся преимущественно утилитарной.",""],2:["y","",""],3:["y","Толкование в САР утилитарно.",""],4:["y","",""]}},
+ {id:"aes",l:"Эстетическая оценка",h:"‘красивый’",
+  g:{0:["o","лепый","Лепый имеет сильный мотивирующий компонент ‘красивый’."],1:["n","‘Такой, который соответствует представлениям о красоте’.",""],2:["y","",""],3:["y","","хорош собою"],4:["y","",""]},
+  b:{0:["o","скверный","скверный — в том числе ‘отвратительный, мерзкий’"],3:["o","отвратительный","Новое прилагательное, специализирующееся на отрицательной эстетической оценке."]}},
+ {id:"eth",l:"Этическая оценка",h:"‘не делает плохого’",
+  g:{0:["o","добрый, благой","Этический компонент — у доброго, благого, славного; благой связан с христианским представлением о положительном."],1:["o","добрый",""],2:["o","добрый",""],
+     3:["n","Новое значение: ‘такой, который не делает плохого’.",""],4:["y","","Человек неблагодарный не может быть хорошим человеком (Лермонтов, 1830)"]},
+  b:{0:["o","злой","Злой — этическая или метафизическая оценка; почти не характеризует бытовые реалии."],1:["o","злой",""],
+     2:["w","Наречие плохо начинает выражать этическую оценку поступков.",""],
+     3:["o","злой, дурной","Оценка плохим остаётся нравственно нейтральной (ср. gut — schlecht и gut — böse у Ницше)."]}},
+ {id:"grad",l:"Количественная оценка",h:"‘достигший нужной степени’, ‘большой’",
+  g:{2:["n","Новые значения: достижение нужной степени и ‘большой’ — превышение количественного порога.","в таком хорошем времени не находился (1730); Какой хорошой шипокъ (1720)"],
+     3:["y","‘Большой’ — о физических и нематериальных объектах.","хорошие деньги (1789)"],4:["y","",""]},
+  b:{}},
+ {id:"soc",l:"Норма сообщества",h:"нравы, тон, вкус, поведение",
+  g:{3:["n","Оценка относительно норм поведения, принятых в сообществе; пятибалльная школьная шкала (1782–1786).","хорошие нравы (1774); хороший вкус (1769)"],4:["y","","Этикет и деликатность принадлежат людям хорошего тона (А. Рене)"]},
+  b:{4:["w","",'плохая репутация (1846)']}},
+ {id:"free",l:"Оценка без заданного критерия",h:"стих, слог, рифма",
+  g:{3:["n","В поэзии хороший оценивает то, оценка чего не сводится к общей точке зрения. Добрый для этого не подходит из-за утилитарных ассоциаций.",""],4:["y","",""]},
+  b:{}},
+ {id:"gen",l:"Общая оценка (примитив)",h:"универсальное «хорошо / плохо»",
+  g:{0:["o","добрый, благой","Чаще всего общую положительную оценку выражает добрый, затем благой."],
+     1:["n","В XV–XVI вв. хороший выступает и как семантический примитив.",""],2:["y","Относительно универсальный положительный маркер.",""],
+     3:["y","Хороший занимает пустующую позицию универсального оценочного прилагательного.",""],4:["y","",""]},
+  b:{0:["o","злой, худой, лихой",""],1:["o","худой",""],2:["o","худой",""],
+     3:["n","Плохой начинает фиксироваться в значении примитива, но не выполняет функции универсального прилагательного.",""],4:["y","",""]}},
+ {id:"grd",l:"Градуирование и усиление",h:"очень хорош, хороший успех",
+  g:{3:["n","Степень задаётся наречными модификаторами; хороший усиливает положительную оценку.","хороший успех; хорошая удача"],4:["y","","Каратыгин отлично хорош во многих ролях (Булгарин, 1833)"]},
+  b:{}},
+ {id:"neg",l:"Отрицание",h:"не хорош / не плох",
+  g:{3:["n","Не хорош / не хорошо — отрицательная оценка.","Не хорошо ни то, когда их вовсе не ведают… (Екатерина II, 1767)"],4:["y","",""]},
+  b:{3:["n","Не плох — положительная оценка.","Да свиной завод не плох… (Фонвизин, «Недоросль», 1782)"],4:["y","","Это езда не плохая (Загоскин, 1830)"]}},
+ {id:"iro",l:"Ирония",h:"хороший о несоответствии норме",
+  g:{2:["n","Ироническое употребление показывает, что значение уже тесно связано с самой идеей нормы.",""],3:["y","",""],4:["y","","А ты хорош! (Пушкин, письмо)"]},
+  b:{}}
+];
+const FIELD=[
+ {g:["добрый (320)","благой (191)","славный (47)","лепый (5)","годный (5)","хороший (3)"],b:["злой (443)","худой (66)","скверный (49)","лихой (45)","скорбный (15)","скудный (8)"],n:"В скобках — вхождения в древнерусском подкорпусе НКРЯ. Основные оппозиции: добрый — лихой, добрый — злой, благой — злой."},
+ {g:["добрый — основное слово","хороший: XV в. — 6, XVI в. — 23, XVII в. — 183 употребления"],b:["худой","плохой ≈ 7% от худого","лихой → ‘удалой’"],n:"Добрый и хороший почти не встречаются в синонимичных контекстах. Плохой заменяет худой резко, почти без параллельного употребления."},
+ {g:["добрый — 633 вхождения","хороший — 99","новое: отличный"],b:["худой — 200 вхождений","плохой — 28","новые: негодный, сомнительный"],n:"Пары: добрый / плохой; хороший / плохой — впервые в 1731 г.; хороший / худой — 1750-е."},
+ {g:["хороший — 77% от доброго","новые: восхитительный, отличный, поразительный, блестящий","добрый застывает в сочетаниях"],b:["худой, дурной","новые: отвратительный, неудачный","не хорош / не плох"],n:"Структура многозначности хорошего примерно на 80% совпадает с современной."},
+ {g:["хороший ≈ 50 тыс. примеров в НКРЯ","замечательный, выдающийся"],b:["плохой ≈ 12 тыс. примеров","жуткий"],n:"Плохой в 1870-е: плохой политик, плохая политика."}
+];
+
+let mode="obj", show="both", sel=null;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function render(){
+  const rows=mode==="obj"?OBJ:EVAL;
+  let h=`<thead><tr><th>${mode==="obj"?"Тип объекта":"Тип оценки"}</th>${PER.map(p=>`<th><b>${p.t}</b>${p.s}</th>`).join("")}</tr></thead><tbody>`;
+  for(const r of rows){
+    h+=`<tr><th scope="row"><span class="rl">${esc(r.l)}</span><span class="rh">${esc(r.h)}</span></th>`;
+    PER.forEach((_,i)=>{h+=`<td><div class="cell">${lane(r,"g",i)}${lane(r,"b",i)}</div></td>`});
+    h+="</tr>";
+  }
+  const cnt=w=>PER.map((_,i)=>rows.filter(r=>r[w][i]&&r[w][i][0]!=="o").length);
+  const cg=cnt("g"),cb=cnt("b");
+  h+=`</tbody><tfoot><tr><th>Число типов, освоенных словом</th>${PER.map((_,i)=>`<td><div class="cnt"><span class="g">х ${cg[i]}</span><span class="b">п ${cb[i]}</span></div></td>`).join("")}</tr></tfoot>`;
+  $("grid").innerHTML=h;
+  $("grid").className=show==="g"?"hideb":show==="b"?"hideg":"";
+  $("grid").querySelectorAll(".lane:not(.empty)").forEach(b=>b.onclick=()=>{sel={id:b.dataset.r,w:b.dataset.w,i:+b.dataset.i};mark();detail()});
+  mark();detail();
+}
+function lane(r,w,i){
+  const c=r[w][i];const word=w==="g"?"хороший":"плохой";
+  if(!c)return `<div class="lane ${w} empty" aria-hidden="true"></div>`;
+  const [s,t]=c;
+  const inner=s==="o"?`<span class="seg2"></span><span class="tag">${esc(t)}</span>`:`<span class="seg2"></span>${s==="n"?'<span class="nw"></span>':""}`;
+  return `<button class="lane ${w} ${s}" data-r="${r.id}" data-w="${w}" data-i="${i}" aria-label="${word}, ${esc(r.l)}, ${PER[i].t}: ${STL[s]}">${inner}</button>`;
+}
+function mark(){document.querySelectorAll(".lane.sel").forEach(e=>e.classList.remove("sel"));
+  if(sel){const e=document.querySelector(`.lane[data-r="${sel.id}"][data-w="${sel.w}"][data-i="${sel.i}"]`);if(e)e.classList.add("sel")}}
+function detail(){
+  const rows=mode==="obj"?OBJ:EVAL;const p=$("panel");
+  const r=sel&&rows.find(x=>x.id===sel.id);const c=r&&r[sel.w][sel.i];
+  if(!c){p.innerHTML=`<h3>Пример и пояснение</h3><p class="empty">Нажмите на ленту в таблице. Ромб отмечает период первой фиксации слова в этой роли или появление нового значения.</p>
+    <p class="src">Строка внизу таблицы считает, сколько типов слово освоило в каждый период: видно, как хороший опережает плохой начиная с XVIII века.</p>`;return}
+  const [s,t,ex]=c,isO=s==="o";
+  p.innerHTML=`<span class="who ${sel.w}">${sel.w==="g"?"хороший":"плохой"}</span>
+   <h3>${esc(r.l)}</h3><span class="per">${PER[sel.i].t}</span><span class="st">${STL[s]}</span>
+   ${isO?`<p>Эту область обслуживает: <i style="font-family:var(--f-display)">${esc(t)}</i>.</p>${ex?`<p>${esc(ex)}</p>`:""}`
+        :`${t?`<p>${esc(t)}</p>`:""}${ex?`<p class="ex">${esc(ex)}</p>`:""}${!t&&!ex?`<p class="empty">В главе этот период для данного типа отдельно не описан; употребление продолжается.</p>`:""}`}
+   <p class="src">Источник: ${PER[sel.i].ch}</p>`;
+}
+$("tObj").onclick=()=>{mode="obj";sel=null;$("tObj").ariaPressed="true";$("tEval").ariaPressed="false";render()};
+$("tEval").onclick=()=>{mode="eval";sel=null;$("tEval").ariaPressed="true";$("tObj").ariaPressed="false";render()};
+document.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{show=b.dataset.w;document.querySelectorAll("[data-w]").forEach(x=>x.ariaPressed=String(x===b));render()});
+
+$("field").innerHTML=FIELD.map((f,i)=>`<div class="fc"><h4>${PER[i].t}</h4><span class="pl">${PER[i].s}</span>
+ <div class="row g"><b>положительная оценка</b>${f.g.map(x=>`<i>${esc(x)}</i>`).join("<br>")}</div>
+ <div class="row b"><b>отрицательная оценка</b>${f.b.map(x=>`<i>${esc(x)}</i>`).join("<br>")}</div>
+ <div class="nt">${esc(f.n)}</div></div>`).join("");
+
+// frequency charts
+function bars(data,max,unit,color){
+  const W=320,bh=22,gap=12,lw=128,H=data.length*(bh+gap);
+  return `<svg viewBox="0 0 ${W} ${H}" role="img">${data.map((d,i)=>{const y=i*(bh+gap),w=Math.max(2,(W-lw-58)*d.v/max);
+   return `<text x="0" y="${y+bh/2+4}" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans, sans-serif">${d.l}</text>
+   <rect x="${lw}" y="${y}" width="${w}" height="${bh}" rx="2" fill="${color}"></rect>
+   <text x="${lw+w+6}" y="${y+bh/2+4}" font-size="12" fill="var(--fg)" font-family="IBM Plex Mono, monospace">${d.t||d.v+unit}</text>`}).join("")}</svg>`;
+}
+$("freq").innerHTML=`
+ <div class="fq"><h4>Хороший относительно доброго</h4><p>Употребления хорошего в процентах от употреблений доброго.</p>
+ ${bars([{l:"XV–XVII вв.",v:1},{l:"1-я пол. XVIII в.",v:15.6,t:"16% (99 / 633)"},{l:"конец XVIII в.",v:77}],80,"%","var(--good)")}</div>
+ <div class="fq"><h4>Плохой относительно худого</h4><p>В старорусском корпусе и в XVIII в. — около 7%; в корпусе 1-й пол. XVIII в. — 28 против 200.</p>
+ ${bars([{l:"XV–XVII вв.",v:7},{l:"1-я пол. XVIII в.",v:14,t:"14% (28 / 200)"},{l:"XVIII в. в целом",v:7,t:"≈ 7%"}],80,"%","var(--bad)")}</div>
+ <div class="fq"><h4>Хороший в старорусских текстах</h4><p>Употребления на 1000 текстов старорусского подкорпуса (6 / 1528, 23 / 2176, 183 / 4272).</p>
+ ${bars([{l:"XV в.",v:3.9,t:"3,9"},{l:"XVI в.",v:10.6,t:"10,6"},{l:"XVII в.",v:42.8,t:"42,8"}],45,"","var(--good)")}</div>`;
+
+sel={id:"abs",w:"g",i:1};
+render();
+</script>
+
+</body>
+</html>
