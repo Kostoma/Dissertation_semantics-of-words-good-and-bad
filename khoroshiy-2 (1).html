@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Граф полисемии «хороший»</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+body{margin:0}[hidden]{display:none!important}
+
+/* Layout: заголовок-словарная статья → полотно графа → шкала эпох → список значений + данные */
+:root{
+  --bg:#EDEFF3; --panel:#F8F9FB; --fg:#18202E; --muted:#5D6678; --line:#C9CED8;
+  --accent:#16181D; --new:#B4531A; --ghost:#A9AFBB; --halo:#EDEFF3;
+  --f-display:"Literata", "PT Serif", Georgia, serif;
+  --f-ui:"IBM Plex Sans", "PT Sans", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10141C; --panel:#171C26; --fg:#E4E8F0; --muted:#8E97A8; --line:#2A3140;
+  --accent:#E6E8EC; --new:#F09A5B; --ghost:#3C4352; --halo:#10141C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10141C; --panel:#171C26; --fg:#E4E8F0; --muted:#8E97A8; --line:#2A3140;
+  --accent:#E6E8EC; --new:#F09A5B; --ghost:#3C4352; --halo:#10141C; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 48px;display:grid;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 20px}
+h1{font-family:var(--f-display);font-weight:600;font-size:clamp(30px,5vw,46px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 i{font-weight:400}
+.gram{font-family:var(--f-display);font-style:italic;color:var(--muted);font-size:17px}
+.sub{flex-basis:100%;color:var(--muted);margin:0;max-width:68ch}
+.stage{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+canvas{display:block;width:100%;height:clamp(420px,62vh,640px);cursor:grab;touch-action:none}
+canvas.drag{cursor:grabbing}
+.tools{position:absolute;top:12px;left:12px;right:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;pointer-events:none}
+.tools>*{pointer-events:auto}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--bg)}
+.seg button,.btn{font:500 13px var(--f-ui);color:var(--fg);background:transparent;border:0;padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.btn{border:1px solid var(--line);border-radius:4px;background:var(--bg)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hint{position:absolute;bottom:10px;left:14px;font-size:12px;color:var(--muted);pointer-events:none}
+.card{position:absolute;bottom:12px;right:12px;width:min(380px,calc(100% - 24px));max-height:calc(100% - 70px);overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:12px 14px;font-size:13px}
+.card h3{font:600 17px var(--f-display);margin:0 0 4px}
+.card p{margin:4px 0;color:var(--muted)}
+.card .gr{font-style:italic;color:var(--muted);margin:0 0 4px}
+.card .def{font:400 15px/1.45 var(--f-display);color:var(--fg);margin:6px 0}
+.card .cm{font-size:12px}
+.card .ex{font:italic 400 14px/1.45 var(--f-display);color:var(--fg);border-top:1px solid var(--line);padding-top:6px;margin-top:8px}
+.card .x{position:absolute;top:6px;right:8px;border:0;background:none;color:var(--muted);font-size:18px;cursor:pointer}
+
+.timeline{display:grid;gap:10px}
+.trow{display:flex;gap:12px;align-items:center}
+#t{flex:1;min-width:0;accent-color:var(--accent)}
+.ticks{display:grid;gap:4px}
+.ticks button{font:500 12px var(--f-ui);color:var(--muted);background:none;border:0;border-top:2px solid var(--line);padding:6px 2px 0;text-align:left;cursor:pointer;min-width:0}
+.ticks button span{display:block;font-family:var(--f-mono);font-size:11px;font-weight:400}
+.ticks button.on{color:var(--fg);border-top-color:var(--accent)}
+
+.cols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:20px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+h2{font:600 13px var(--f-ui);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);margin-bottom:12px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+ul.senses{list-style:none;margin:0;padding:0;display:grid}
+ul.senses li{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer;transition:opacity .3s}
+ul.senses li .lab{font-family:var(--f-display);font-size:16px}
+ul.senses li .st{font:500 11px var(--f-ui);text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+ul.senses li.active .st{color:var(--accent);border-color:var(--accent)}
+ul.senses li.new .st{color:var(--new);border-color:var(--new)}
+ul.senses li.off{opacity:.45}
+.bars{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:2px;width:90px;height:6px;margin-top:4px}
+.bars b{background:var(--line);border-radius:1px}.bars b.y{background:var(--accent)}
+details{border:1px solid var(--line);border-radius:4px;background:var(--panel);padding:10px 14px}
+summary{cursor:pointer;font-weight:600}
+textarea{width:100%;min-height:300px;font:12px/1.45 var(--f-mono);background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:10px;margin-top:10px;resize:vertical}
+.err{color:var(--new);font-size:13px;min-height:1.2em}
+.note{font-size:13px;color:var(--muted);max-width:70ch}
+code{font-family:var(--f-mono);font-size:12px}
+@media (max-width:480px){.ticks button span{display:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1 id="word">хороший</h1><span class="gram" id="gram">прил.</span>
+    <p class="sub">Структура полисемии как граф: узлы — значения, рёбра — семантические связи. Двигайте шкалу периодов: значения, уже вошедшие в структуру, проявляются, ещё не возникшие остаются бледными. Граф можно вращать мышью или пальцем.</p>
+  </header>
+
+  <div class="stage">
+    <canvas id="cv" aria-label="Граф значений слова"></canvas>
+    <div class="tools">
+      <div class="seg" role="group" aria-label="Режим">
+        <button id="m3" aria-pressed="true">3D</button><button id="m2" aria-pressed="false">2D</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="spin" aria-pressed="true">Вращение: вкл</button>
+        <button class="btn" id="ghost" aria-pressed="false">Скрыть утраченные</button>
+      </div>
+    </div>
+    <div class="hint" id="hint">Перетаскивание — поворот · колесо — масштаб · клик по узлу — подробности</div>
+    <div class="card" id="card" hidden></div>
+  </div>
+
+  <section class="timeline" aria-label="Хронология">
+    <div class="trow">
+      <button class="btn" id="play" style="min-width:96px">▶ Пуск</button>
+      <input type="range" id="t" min="0" max="4" step="0.01" value="0" aria-label="Период">
+    </div>
+    <div class="ticks" id="ticks"></div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2 id="ptitle">Значения в периоде</h2>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>актуально</span>
+        <span><i style="background:transparent;border:2px solid var(--new)"></i>появилось в этом периоде</span>
+        <span><i style="background:var(--ghost)"></i>ещё не зафиксировано</span>
+      </div>
+      <ul class="senses" id="list"></ul>
+    </section>
+    <section style="display:grid;gap:12px;align-content:start">
+      <details id="det">
+        <summary>Данные графа (JSON) — вставьте своё слово</summary>
+        <p class="note">Периоды — массив подписей. У каждого значения <code>periods</code> — индексы периодов, где оно зафиксировано. Рёбра активны, когда активны оба узла (или задайте рёбрам свои <code>periods</code>).</p>
+        <textarea id="json" spellcheck="false"></textarea>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn" id="apply">Применить</button>
+          <button class="btn" id="reset">Вернуть пример</button>
+          <span class="err" id="err"></span>
+        </div>
+      </details>
+      <p class="note">Значение входит в структуру полисемии с периода первой фиксации и дальше сохраняется. Нажмите на узел или строку списка, чтобы увидеть толкование и примеры.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+const SAMPLE = {
+  "word": "хороший",
+  "gram": "прил.",
+  "periods": [
+    {
+      "label": "Старорусский период",
+      "range": ""
+    },
+    {
+      "label": "Конец XVII — начало XVIII века",
+      "range": ""
+    },
+    {
+      "label": "Середина и вторая половина XVIII века",
+      "range": ""
+    },
+    {
+      "label": "Первая половина и середина XIX века",
+      "range": ""
+    },
+    {
+      "label": "Конец XIX — начало XX века",
+      "range": ""
+    },
+    {
+      "label": "Вторая половина XX века",
+      "range": ""
+    }
+  ],
+  "nodes": [
+    {
+      "id": "obr",
+      "label": "Образцовый",
+      "periods": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "def": "‘Такой, который соответствует общепринятому представлению о том, каким должен быть подобный объект, или превосходит его’",
+      "comment": "[О профессиях, предметах, качествах]",
+      "examples": "Он очень хороший переводчик; Хороший хозяин собаку на улицу не выпустит; хорошее ателье."
+    },
+    {
+      "id": "kra",
+      "label": "Красивый",
+      "periods": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "gram": "Только КР.",
+      "def": "‘Такой, который соответствует представлениям о красоте’",
+      "comment": "[обычно о человеке]",
+      "examples": "Он был хорош собою; Чудо как хороша."
+    },
+    {
+      "id": "dos",
+      "label": "Достигший нужной степени",
+      "periods": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "def": "‘Достигший нужной или достаточной для использования степени или стадии’",
+      "examples": "Тесто уже хорошее, можно доставать пирог из духовки."
+    },
+    {
+      "id": "bol",
+      "label": "Большой",
+      "periods": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "gram": "разг.",
+      "def": "‘Такой, количество, размер или другой параметр которого оценивается как достаточно большой’",
+      "examples": "Мне отвесили хороший такой, килограмма три, кусок мяса; Раз в неделю он закатывал хороший скандал; здесь нужна хорошая трепка."
+    },
+    {
+      "id": "nep",
+      "label": "Не плохой",
+      "periods": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "def": "‘Такой, который не делает плохого или не связан с тем, что считается плохим’",
+      "comment": "[о человеке и по аналогии о животных]",
+      "examples": "У нас хорошие отношения; Он хороший человек."
+    },
+    {
+      "id": "pol",
+      "label": "Приносящий пользу",
+      "periods": [
+        2,
+        3,
+        4,
+        5
+      ],
+      "def": "‘Такой, который приносит или может принести пользу в определенной ситуации А1 для человека А2’",
+      "examples": "Это хорошее знакомство; У девочки хорошие данные для художественной гимнастики; Локдаун оказался очень хорош для развития сервисов доставок."
+    },
+    {
+      "id": "hva",
+      "label": "Хватит",
+      "periods": [
+        5
+      ],
+      "gram": "Только в форме МУЖ ЕД КР, в функции сказуемого; разг.",
+      "def": "‘Говорящий считает, что настал тот момент, когда нужно прекратить длящееся действие или положение дел А1’",
+      "comment": "[А1 часто не выражается; в функции сказуемого]",
+      "examples": "Ну все, хорош!; Хорош ныть, давай думать, что делать."
+    }
+  ],
+  "edges": [
+    [
+      "obr",
+      "pol"
+    ],
+    [
+      "obr",
+      "nep"
+    ],
+    [
+      "obr",
+      "kra"
+    ],
+    [
+      "obr",
+      "dos"
+    ],
+    [
+      "obr",
+      "bol"
+    ],
+    [
+      "dos",
+      "bol"
+    ],
+    [
+      "bol",
+      "hva"
+    ]
+  ]
+};
+
+const $ = id => document.getElementById(id);
+const cv = $("cv"), ctx = cv.getContext("2d");
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let D, N=[], E=[], P=0, byId={};
+let yaw=0.5, pitch=-0.25, zoom=1, mode3=1, modeTarget=1, spin=!reduce, hideGhost=false;
+let t=0, playing=false, hover=null, selected=null;
+
+function rng(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}}
+function layout(dim){
+  const r=rng(7), pos=N.map(()=>[r()-.5,r()-.5,dim===3?r()-.5:0]);
+  const idx=Object.fromEntries(N.map((n,i)=>[n.id,i]));
+  for(let it=0;it<500;it++){
+    const f=pos.map(()=>[0,0,0]), a=0.04*(1-it/520);
+    for(let i=0;i<pos.length;i++)for(let j=i+1;j<pos.length;j++){
+      const d=[0,1,2].map(k=>pos[i][k]-pos[j][k]); const l2=d[0]**2+d[1]**2+d[2]**2+1e-4;
+      for(let k=0;k<3;k++){const v=d[k]/l2*0.02;f[i][k]+=v;f[j][k]-=v}
+    }
+    for(const e of E){const i=idx[e.a],j=idx[e.b];const d=[0,1,2].map(k=>pos[j][k]-pos[i][k]);
+      const l=Math.hypot(...d)+1e-6, s=(l-0.35)*0.5;
+      for(let k=0;k<3;k++){const v=d[k]/l*s;f[i][k]+=v;f[j][k]-=v}}
+    for(let i=0;i<pos.length;i++)for(let k=0;k<3;k++){f[i][k]-=pos[i][k]*0.02;pos[i][k]+=Math.max(-.1,Math.min(.1,f[i][k]))*a*25}
+    if(dim===2)pos.forEach(p=>p[2]=0);
+  }
+  const c=[0,1,2].map(k=>pos.reduce((s,p)=>s+p[k],0)/pos.length);
+  pos.forEach(p=>{for(let k=0;k<3;k++)p[k]-=c[k]});
+  const m=Math.max(...pos.map(p=>Math.hypot(...p)))||1;
+  return pos.map(p=>p.map(v=>v/m));
+}
+
+function load(data){
+  if(!data.periods?.length||!Array.isArray(data.nodes)||!Array.isArray(data.edges)) throw new Error("Нужны поля periods, nodes и edges.");
+  D=data; P=data.periods.length;
+  N=data.nodes.map(n=>({...n,set:new Set(n.periods||[]),w:0}));
+  byId=Object.fromEntries(N.map(n=>[n.id,n]));
+  E=data.edges.map(e=>Array.isArray(e)?{a:e[0],b:e[1]}:{...e,set:e.periods?new Set(e.periods):null});
+  for(const e of E) if(!byId[e.a]||!byId[e.b]) throw new Error(`Ребро ссылается на неизвестный узел: ${e.a} — ${e.b}`);
+  const l3=layout(3), l2=layout(2);
+  N.forEach((n,i)=>{n.p3=l3[i];n.p2=l2[i]});
+  $("word").textContent=data.word||"слово"; $("gram").textContent=data.gram||"";
+  document.title=`Граф полисемии «${data.word||"слово"}»`;
+  $("t").max=P-1; t=Math.min(t,P-1); $("t").value=t;
+  $("ticks").style.gridTemplateColumns=`repeat(${P},minmax(0,1fr))`;
+  $("ticks").innerHTML=data.periods.map((p,i)=>`<button data-i="${i}">${esc(p.label||p)}<span>${esc(p.range||"")}</span></button>`).join("");
+  $("ticks").querySelectorAll("button").forEach(b=>b.onclick=()=>{stop();animateTo(+b.dataset.i)});
+  selected=null; $("card").hidden=true; lastP=-1;
+  $("json").value=JSON.stringify(data,null,2);
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+const act=(set,p)=>set.has(p)?1:0;
+function weightAt(set,t){const a=Math.floor(t),b=Math.min(a+1,P-1),f=t-a;return act(set,a)*(1-f)+act(set,b)*f}
+const ease=x=>x<.5?2*x*x:1-(-2*x+2)**2/2;
+
+let animFrom=0,animTo=0,animStart=0,animating=false;
+function animateTo(p){animFrom=t;animTo=p;animStart=performance.now();animating=true}
+function stop(){playing=false;$("play").textContent="▶ Пуск"}
+$("play").onclick=()=>{if(playing){stop();return}playing=true;$("play").textContent="❚❚ Пауза";if(t>=P-1.001)t=0;animating=false};
+$("t").oninput=e=>{stop();animating=false;t=+e.target.value};
+
+$("m3").onclick=()=>{modeTarget=1;$("m3").ariaPressed="true";$("m2").ariaPressed="false";$("spin").disabled=false;$("hint").textContent="Перетаскивание — поворот · колесо — масштаб · клик по узлу — подробности"};
+$("m2").onclick=()=>{modeTarget=0;$("m2").ariaPressed="true";$("m3").ariaPressed="false";$("spin").disabled=true;$("hint").textContent="Колесо — масштаб · клик по узлу — подробности"};
+$("spin").onclick=()=>{spin=!spin;$("spin").ariaPressed=spin;$("spin").textContent="Вращение: "+(spin?"вкл":"выкл")};
+$("ghost").onclick=()=>{hideGhost=!hideGhost;$("ghost").ariaPressed=hideGhost;$("ghost").textContent=hideGhost?"Показать утраченные":"Скрыть утраченные"};
+
+// interaction
+let drag=null;
+cv.addEventListener("pointerdown",e=>{drag={x:e.clientX,y:e.clientY,moved:0};cv.setPointerCapture(e.pointerId);cv.classList.add("drag")});
+cv.addEventListener("pointermove",e=>{
+  const r=cv.getBoundingClientRect(); const mx=e.clientX-r.left,my=e.clientY-r.top;
+  if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.moved+=Math.abs(dx)+Math.abs(dy);
+    if(mode3>.5){yaw+=dx*0.008;pitch=Math.max(-1.4,Math.min(1.4,pitch+dy*0.008))}
+    drag.x=e.clientX;drag.y=e.clientY}
+  hover=pick(mx,my);
+});
+cv.addEventListener("pointerup",e=>{cv.classList.remove("drag");
+  if(drag&&drag.moved<5){const r=cv.getBoundingClientRect();const n=pick(e.clientX-r.left,e.clientY-r.top);select(n)}drag=null});
+cv.addEventListener("pointerleave",()=>hover=null);
+cv.addEventListener("wheel",e=>{e.preventDefault();zoom=Math.max(.5,Math.min(2.5,zoom*Math.exp(-e.deltaY*0.0012)))},{passive:false});
+
+function pick(x,y){let best=null,bd=22;for(const n of N){if(!n.sx)continue;if(hideGhost&&n.w<.05)continue;const d=Math.hypot(n.sx-x,n.sy-y);if(d<bd){bd=d;best=n}}return best}
+function select(n){selected=n;const c=$("card");if(!n){c.hidden=true;return}
+  const per=D.periods.map((p,i)=>n.set.has(i)?(p.label||p):null).filter(Boolean);
+  const nb=E.filter(e=>e.a===n.id||e.b===n.id).map(e=>byId[e.a===n.id?e.b:e.a].label);
+  c.innerHTML=`<button class="x" aria-label="Закрыть">×</button><h3>‘${esc(n.label)}’</h3>
+  ${n.gram?`<p class="gr">${esc(n.gram)}</p>`:""}${n.def?`<p class="def">${esc(n.def)}</p>`:""}${n.comment?`<p class="cm">${esc(n.comment)}</p>`:""}${n.examples?`<p class="ex">${esc(n.examples)}</p>`:""}${n.note?`<p>${esc(n.note)}</p>`:""}<p><b>Период появления:</b> ${esc(per[0]||"—")}</p><p><b>Связи:</b> ${esc(nb.join(", ")||"—")}</p>`;
+  c.querySelector(".x").onclick=()=>select(null);c.hidden=false}
+
+// list
+let lastP=-1;
+function renderList(p){
+  if(p===lastP)return;lastP=p;
+  const per=D.periods[p];$("ptitle").textContent=`Значения: ${per.label||per}${per.range?" ("+per.range+")":""}`;
+  $("ticks").querySelectorAll("button").forEach((b,i)=>b.classList.toggle("on",i===p));
+  const order=[...N].sort((a,b)=>act(b.set,p)-act(a.set,p));
+  $("list").innerHTML=order.map(n=>{const on=n.set.has(p),nw=on&&p>0&&!n.set.has(p-1)&&[...n.set].every(x=>x>=p);
+    const wasLost=!on&&[...n.set].some(x=>x<p);
+    const st=on?(nw?"новое":"актуально"):(wasLost?"утрачено":"ещё нет");
+    const bars=D.periods.map((_,i)=>`<b class="${n.set.has(i)?"y":""}"></b>`).join("");
+    return `<li data-id="${esc(n.id)}" class="${on?(nw?"new":"active"):"off"}"><div><span class="lab">‘${esc(n.label)}’</span><div class="bars" style="--n:${P}">${bars}</div></div><span class="st">${st}</span></li>`}).join("");
+  $("list").querySelectorAll("li").forEach(li=>{li.onclick=()=>select(byId[li.dataset.id]);li.onmouseenter=()=>hover=byId[li.dataset.id];li.onmouseleave=()=>hover=null});
+}
+
+// render
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function mix(c1,c2,k){const h=c=>{c=c.replace("#","");return[0,2,4].map(i=>parseInt(c.slice(i,i+2),16))};const a=h(c1),b=h(c2);return`rgb(${a.map((v,i)=>Math.round(v+(b[i]-v)*k)).join(",")})`}
+let W=0,H=0,dpr=1,last=performance.now();
+function resize(){dpr=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr}
+addEventListener("resize",resize);
+
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  if(playing){t+=dt*0.35;if(t>=P-1){t=P-1;stop()}$("t").value=t}
+  if(animating){const k=Math.min(1,(now-animStart)/700);t=animFrom+(animTo-animFrom)*ease(k);$("t").value=t;if(k>=1)animating=false}
+  mode3+=(modeTarget-mode3)*Math.min(1,dt*6);
+  if(spin&&modeTarget===1&&!drag)yaw+=dt*0.15;
+  renderList(Math.round(t));
+
+  const C={bg:css("--panel"),fg:css("--fg"),acc:css("--accent"),nw:css("--new"),gh:css("--ghost"),line:css("--line"),muted:css("--muted")};
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+  const R=Math.min(W,H*1.25)*0.36*zoom, cx=W/2, cy=H/2+10, m=mode3;
+  const cy_=Math.cos(yaw*m),sy=Math.sin(yaw*m),cp=Math.cos(pitch*m),sp=Math.sin(pitch*m);
+  const pIdx=Math.round(t);
+  for(const n of N){
+    const p=n.p3.map((v,k)=>v*m+n.p2[k]*(1-m));
+    let x=p[0]*cy_-p[2]*sy, z=p[0]*sy+p[2]*cy_, y=p[1]*cp-z*sp; z=p[1]*sp+z*cp;
+    const s=3/(3+z*m); n.sx=cx+x*R*s; n.sy=cy+y*R*s; n.z=z; n.s=s;
+    n.w=weightAt(n.set,t);
+    const prevOn=pIdx>0&&n.set.has(pIdx-1), firstHere=n.set.has(pIdx)&&!prevOn&&[...n.set].every(i=>i>=pIdx)&&pIdx>0;
+    n.isNew=firstHere;
+  }
+  const nbr=new Set();const focus=hover||selected;
+  if(focus)for(const e of E){if(e.a===focus.id)nbr.add(e.b);if(e.b===focus.id)nbr.add(e.a)}
+
+  // edges (curved like on the source drawings)
+  for(const e of E){const a=byId[e.a],b=byId[e.b];
+    let w=e.set?weightAt(e.set,t):Math.min(a.w,b.w);
+    if(hideGhost&&w<.05)continue;
+    const hl=focus&&(e.a===focus.id||e.b===focus.id);
+    const mx=(a.sx+b.sx)/2,my=(a.sy+b.sy)/2,dx=b.sx-a.sx,dy=b.sy-a.sy,len=Math.hypot(dx,dy)||1;
+    const bend=len*0.18;const qx=mx-dy/len*bend,qy=my+dx/len*bend;
+    ctx.beginPath();ctx.moveTo(a.sx,a.sy);ctx.quadraticCurveTo(qx,qy,b.sx,b.sy);
+    ctx.strokeStyle=mix(C.gh,C.acc,w);ctx.globalAlpha=(0.25+0.65*w)*(focus&&!hl?0.35:1);
+    ctx.lineWidth=(hl?2.4:1.2+0.6*w);ctx.setLineDash(w<.5?[4,4]:[]);ctx.stroke();
+  }
+  ctx.setLineDash([]);ctx.globalAlpha=1;
+
+  const order=[...N].sort((a,b)=>b.z-a.z);
+  for(const n of order){
+    if(hideGhost&&n.w<.05)continue;
+    const dim=focus&&n!==focus&&!nbr.has(n.id)?0.35:1;
+    const col=n.isNew&&n.w>.5?C.nw:C.acc;
+    const r=(5+5*n.w)*n.s*(n===focus?1.3:1);
+    ctx.globalAlpha=(0.35+0.65*n.w)*dim;
+    if(n.w>.5){ctx.beginPath();ctx.arc(n.sx,n.sy,r+5*n.s,0,7);ctx.fillStyle=col;ctx.globalAlpha*=0.18;ctx.fill();ctx.globalAlpha=(0.35+0.65*n.w)*dim}
+    ctx.beginPath();ctx.arc(n.sx,n.sy,r,0,7);ctx.fillStyle=mix(C.gh,C.acc,n.w);ctx.fill();if(n.isNew&&n.w>.5){ctx.beginPath();ctx.arc(n.sx,n.sy,r+3*n.s,0,7);ctx.strokeStyle=C.nw;ctx.lineWidth=2;ctx.stroke()}
+    const fs=Math.round((12+3*n.w)*Math.max(.8,Math.min(1.2,n.s)));
+    ctx.font=`${n.w>.5?"600":"400"} ${fs}px Literata, "PT Serif", Georgia, serif`;
+    ctx.textAlign="center";ctx.textBaseline="bottom";
+    const txt=`‘${n.label}’`;ctx.lineWidth=4;ctx.strokeStyle=C.bg;ctx.lineJoin="round";
+    ctx.strokeText(txt,n.sx,n.sy-r-4);ctx.fillStyle=n.w>.5?C.fg:C.muted;ctx.fillText(txt,n.sx,n.sy-r-4);
+  }
+  ctx.globalAlpha=1;
+
+  // period stamp
+  const per=D.periods[pIdx];ctx.textAlign="right";ctx.textBaseline="top";
+  ctx.font='italic 400 20px Literata, Georgia, serif';ctx.fillStyle=C.fg;ctx.fillText(per.label||per,W-16,56);
+  ctx.font='400 12px "IBM Plex Mono", monospace';ctx.fillStyle=C.muted;ctx.fillText(per.range||"",W-16,82);
+  requestAnimationFrame(frame);
+}
+
+$("apply").onclick=()=>{try{load(JSON.parse($("json").value));$("err").textContent="Применено."}catch(e){$("err").textContent="Ошибка: "+e.message}};
+$("reset").onclick=()=>{load(SAMPLE);$("err").textContent=""};
+if(reduce){spin=false;$("spin").ariaPressed="false";$("spin").textContent="Вращение: выкл"}
+load(SAMPLE);resize();requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
